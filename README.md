@@ -1,4 +1,4 @@
-# Sistem Rekomendasi Media Interaktif Buku & Manga
+# Sistem Rekomendasi Buku
 
 Aplikasi ini adalah sistem rekomendasi media interaktif berbasis web yang dibangun dengan Streamlit. Dirancang untuk membantu pengguna mencari, menemukan, dan mengelola daftar bacaan dari berbagai sumber online (Google Books, Open Library, MyAnimeList) serta memanfaatkan kecerdasan buatan (LLM) untuk analisis dan rekomendasi cerdas.
 
