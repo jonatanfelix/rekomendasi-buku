@@ -305,6 +305,7 @@ def search_google_books(query, api_key, startIndex=0, maxResults=40):
     params = {
         "q": query,
         "key": api_key,
+        "country": "ID",
         "startIndex": startIndex,
         "maxResults": maxResults,
         "langRestrict": "id"
