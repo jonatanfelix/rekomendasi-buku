@@ -386,32 +386,89 @@ def search_google_books(query, api_key, startIndex=0, maxResults=40):
         return [], False, next_page_params
 
 def search_open_library_by_query(query, page=1, limit=30):
-    base_url = "http://openlibrary.org/search.json"; params = {"q": query, "page": page, "limit": limit, "fields": "key,cover_edition_key,title,author_name,first_sentence,subject_key,isbn,publisher,language,publish_date,number_of_pages_median"}
-    hasil_buku_ol, has_more, next_page_params = [], False, {'page': page, 'limit': limit}
+    """
+    Mencari buku menggunakan Open Library API dengan penanganan error spesifik.
+    
+    Mengembalikan tuple: (list_hasil, boolean_apakah_ada_halaman_berikutnya, dict_parameter_halaman_berikutnya)
+    """
+    base_url = "http://openlibrary.org/search.json"
+    params = {
+        "q": query,
+        "page": page,
+        "limit": limit,
+        "fields": "key,cover_edition_key,title,author_name,first_sentence,subject_key,isbn,publisher,language,publish_date,number_of_pages_median,first_publish_year"
+    }
+    
+    # Inisialisasi variabel hasil untuk memastikan selalu ada nilai balik yang valid
+    hasil_buku_ol = []
+    has_more = False
+    next_page_params = {'page': page, 'limit': limit}
+
     try:
-        response = requests.get(base_url, params=params, timeout=10); response.raise_for_status()
-        data = response.json(); docs = data.get("docs", [])
+        response = requests.get(base_url, params=params, timeout=15) # Timeout sedikit lebih lama
+        response.raise_for_status() # Akan memunculkan error untuk status 4xx atau 5xx
+        
+        data = response.json()
+        docs = data.get("docs", [])
+        
         for item in docs:
-            isbn_list = item.get("isbn", []); valid_isbns = [i for i in isbn_list if i and (len(i) == 10 or len(i) == 13)]
-            isbn_13_ol = valid_isbns[0] if valid_isbns else None; cover_olid = item.get('cover_edition_key')
+            # Ekstraksi data dengan fallback jika field tidak ada
+            isbn_list = item.get("isbn", [])
+            valid_isbns = [i for i in isbn_list if i and (len(i) == 10 or len(i) == 13)]
+            isbn_13_ol = valid_isbns[0] if valid_isbns else None
+            cover_olid = item.get('cover_edition_key')
+            
             img_url = DEFAULT_IMAGE_URL
-            if cover_olid: img_url = f"https://covers.openlibrary.org/b/olid/{cover_olid}-L.jpg"
-            elif isbn_13_ol: img_url = f"https://covers.openlibrary.org/b/isbn/{isbn_13_ol}-L.jpg"
+            if cover_olid:
+                img_url = f"https://covers.openlibrary.org/b/olid/{cover_olid}-L.jpg"
+            elif isbn_13_ol:
+                img_url = f"https://covers.openlibrary.org/b/isbn/{isbn_13_ol}-L.jpg"
+
             hasil_buku_ol.append({
                 "id_buku_api": f"ol_{item.get('key','').split('/')[-1]}_{cover_olid or isbn_13_ol or np.random.randint(10000)}", 
-                "judul": item.get("title", "N/A"), "penulis": ", ".join(item.get("author_name", ["N/A"])), "item_type": "Book",
-                "deskripsi": (item.get("first_sentence") or ["N/A"])[0], "genre": ", ".join([s.replace("_"," ").title() for s in item.get("subject_key",[])[:3]]),
-                "url_gambar_sampul": img_url, "source_api": "Open Library", "isbn_13": isbn_13_ol,
+                "judul": item.get("title", "Judul Tidak Tersedia"),
+                "penulis": ", ".join(item.get("author_name", ["Penulis Tidak Diketahui"])),
+                "item_type": "Book",
+                "deskripsi": (item.get("first_sentence") or ["Tidak ada deskripsi."])[0],
+                "genre": ", ".join([s.replace("_"," ").title() for s in item.get("subject_key",[])[:3]]),
+                "url_gambar_sampul": img_url,
+                "source_api": "Open Library",
+                "isbn_13": isbn_13_ol,
                 "tanggal_publikasi": (item.get("publish_date") or [item.get("first_publish_year", "N/A")])[0],
-                "penerbit": (item.get("publisher") or ["N/A"])[0], "jumlah_halaman": item.get("number_of_pages_median", np.nan),
+                "penerbit": (item.get("publisher") or ["N/A"])[0],
+                "jumlah_halaman": item.get("number_of_pages_median", np.nan),
                 "bahasa": (item.get("language") or ["N/A"])[0],
             })
-        items_returned = len(docs); total_items_api = data.get("numFound", 0)
-        if items_returned > 0 and (page * limit) < total_items_api: has_more = True
+            
+        items_returned = len(docs)
+        total_items_api = data.get("numFound", 0)
+        
+        if items_returned > 0 and (page * limit) < total_items_api:
+            has_more = True
+        
         next_page_params = {'page': page + 1, 'limit': limit}
+        
         return hasil_buku_ol, has_more, next_page_params
-    except requests.exceptions.Timeout: st.warning("Open Library API Timeout."); return [], False, {'page': page, 'limit': limit}
-    except Exception as e: st.warning(f"Open Library API Error: {e}"); return [], False, {'page': page, 'limit': limit}
+
+    except requests.exceptions.HTTPError as http_err:
+        # Pengecekan spesifik untuk status code 503
+        if hasattr(http_err.response, 'status_code') and http_err.response.status_code == 503:
+            st.warning("Maaf, server Open Library sedang tidak tersedia atau sibuk. Silakan coba lagi beberapa saat lagi.")
+        else:
+            st.warning(f"Open Library API HTTP Error: {http_err}")
+        return [], False, next_page_params # Kembalikan nilai default
+        
+    except requests.exceptions.Timeout:
+        st.warning("Open Library API Timeout. Permintaan memakan waktu terlalu lama.")
+        return [], False, next_page_params
+        
+    except requests.exceptions.RequestException as e:
+        st.error(f"Terjadi masalah koneksi ke Open Library: {e}")
+        return [], False, next_page_params
+        
+    except Exception as e:
+        st.error(f"Terjadi kesalahan tidak terduga di search_open_library_by_query: {e}")
+        return [], False, next_page_params
 
 def search_myanimelist(query, page=1, limit=25, order_by=None, sort=None, genres=None, item_type_mal=None):
     base_url = "https://api.jikan.moe/v4/manga"; params = {"q": query if query else "", "page": page, "limit": limit, "sfw": "true"} 
