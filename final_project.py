@@ -202,7 +202,6 @@ def get_read_if_you_like_with_llm(book_title, book_genre, book_description, item
     if recommendations_str:
         try:
             json_match = None
-            # Regex untuk mengekstrak blok JSON utama (termasuk yang multi-baris)
             match = re.search(r'\{[\s\S]*?\}', recommendations_str) 
             if match: 
                 json_match = match.group(0)
@@ -232,11 +231,6 @@ def get_item_reviews(item_data):
     # Hanya implementasi placeholder untuk MyAnimeList
     if source_api == "MyAnimeList" and item_api_id:
         mal_id_numeric = str(item_api_id).replace("mal_", "")
-        # Untuk implementasi nyata, Anda akan memanggil Jikan API di sini
-        # Contoh: https://api.jikan.moe/v4/manga/{mal_id_numeric}/reviews
-        # atau /anime/{mal_id_numeric}/reviews
-        # JANGAN LUPA BATASAN RATE JIKAN (jangan panggil terlalu sering saat testing)
-        # st.caption(f"DEBUG: Akan mengambil review untuk MAL ID {mal_id_numeric}")
         return [
             f"Ini adalah ulasan placeholder pertama untuk item MAL ID {mal_id_numeric}. Ceritanya sangat menarik dengan karakter yang kuat.",
             f"Ulasan kedua untuk {mal_id_numeric}: Saya suka bagaimana penulis membangun dunia dalam karya ini. Sangat imersif!",
@@ -297,10 +291,26 @@ def add_item_to_list(book_item_dict, list_name, user_id):
 # (Implementasi search_google_books, search_open_library_by_query, search_myanimelist, search_top_jikan dari kode sebelumnya yang sudah lengkap)
 def search_google_books(query, api_key, startIndex=0, maxResults=40):
     if not api_key or api_key == "YOUR_GOOGLE_BOOKS_API_KEY": return [], False, {} 
-    base_url = "https://www.googleapis.com/books/v1/volumes"; params = {"q": query, "key": api_key, "startIndex": startIndex, "maxResults": maxResults, "langRestrict": "id"}
+    
+    base_url = "https://www.googleapis.com/books/v1/volumes"
+    params = {"q": query, "key": api_key, "startIndex": startIndex, "maxResults": maxResults, "langRestrict": "id"}
+    
+    # Tentukan header Referer, ambil dari secrets jika ada untuk deployment
+    app_url_referer = "http://localhost:8501"
+    try:
+        app_url_referer = st.secrets.get("APP_URL", app_url_referer)
+    except (AttributeError, FileNotFoundError):
+        pass 
+        
+    headers = {"Referer": app_url_referer}
+
     hasil_buku, has_more, next_page_params = [], False, {'startIndex': startIndex, 'maxResults': maxResults}
     try:
-        response = requests.get(base_url, params=params, timeout=10); response.raise_for_status()
+        # Tambahkan parameter 'headers' ke dalam panggilan requests.get()
+        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # ... (sisa kode fungsi tetap sama) ...
         data = response.json(); items = data.get("items", [])
         for item in items:
             volume_info = item.get("volumeInfo", {})
