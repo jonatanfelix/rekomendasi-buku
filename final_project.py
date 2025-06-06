@@ -13,24 +13,8 @@ DEFAULT_IMAGE_URL = "https://placehold.co/200x300/CCCCCC/FFFFFF?text=No+Image&fo
 ITEMS_PER_PAGE = 5 
 
 # GANTI DENGAN API KEY ANDA YANG VALID
-st.subheader("--- DEBUGGING SECRETS (Hapus Nanti) ---")
-try:
-    # Cek apakah 'secrets' punya key-nya
-    if "GOOGLE_BOOKS_API_KEY" in st.secrets:
-        st.success("✅ 'GOOGLE_BOOKS_API_KEY' DITEMUKAN di st.secrets.")
-        # Cek nilainya (hati-hati jangan ekspos key penuh di app publik)
-        key_value = st.secrets["GOOGLE_BOOKS_API_KEY"]
-        st.write(f"Nilai Key (sebagian): `{key_value[:4]}...{key_value[-4:]}`")
-    else:
-        st.error("❌ 'GOOGLE_BOOKS_API_KEY' TIDAK DITEMUKAN di st.secrets.")
-
-    # Tampilkan semua keys yang ada di secrets untuk debugging
-    st.write("Semua keys yang tersedia di st.secrets:", list(st.secrets.keys()))
-except FileNotFoundError:
-    st.error("FileNotFoundError: File secrets.toml tidak ditemukan oleh Streamlit saat ini.")
-except Exception as e:
-    st.error(f"Terjadi error saat mencoba mengakses st.secrets: {e}")
-st.markdown("---")
+HARDCODED_API_KEY_GOOGLE = st.secrets.get("GOOGLE_BOOKS_API_KEY", "YOUR_GOOGLE_BOOKS_API_KEY") 
+OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", "SKOR-YOUR_OPENROUTER_API_KEY_HERE")
 OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-4-maverick:free"  
 
 # --- Inisialisasi Session State ---
