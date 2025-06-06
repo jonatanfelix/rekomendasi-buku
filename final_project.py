@@ -290,48 +290,99 @@ def add_item_to_list(book_item_dict, list_name, user_id):
 # --- Fungsi Pencarian API ---
 # (Implementasi search_google_books, search_open_library_by_query, search_myanimelist, search_top_jikan dari kode sebelumnya yang sudah lengkap)
 def search_google_books(query, api_key, startIndex=0, maxResults=40):
-    if not api_key or api_key == "YOUR_GOOGLE_BOOKS_API_KEY": return [], False, {} 
+    """
+    Mencari buku menggunakan Google Books API dengan penambahan header Referer.
     
+    Mengembalikan tuple: (list_hasil, boolean_apakah_ada_halaman_berikutnya, dict_parameter_halaman_berikutnya)
+    """
+    # 1. Cek validitas API Key yang diberikan
+    if not api_key or api_key == "YOUR_GOOGLE_BOOKS_API_KEY": # Ganti placeholder ini jika Anda menggunakannya
+        st.warning("API Key Google Books tidak valid atau belum disetel di Streamlit Secrets.")
+        return [], False, {} 
+    
+    # 2. Siapkan parameter untuk URL query
     base_url = "https://www.googleapis.com/books/v1/volumes"
-    params = {"q": query, "key": api_key, "startIndex": startIndex, "maxResults": maxResults, "langRestrict": "id"}
+    params = {
+        "q": query,
+        "key": api_key,
+        "startIndex": startIndex,
+        "maxResults": maxResults,
+        "langRestrict": "id"
+    }
     
-    # Tentukan header Referer, ambil dari secrets jika ada untuk deployment
-    app_url_referer = "http://localhost:8501"
-    try:
-        app_url_referer = st.secrets.get("APP_URL", app_url_referer)
-    except (AttributeError, FileNotFoundError):
-        pass 
-        
+    # 3. Siapkan header Referer (PENTING untuk mengatasi error 403)
+    # Gunakan URL aplikasi Anda yang sudah di-deploy. Ini harus cocok dengan yang Anda daftarkan
+    # di "Website restrictions" pada Google Cloud Console.
+    app_url_referer = "https://rekomendasi-buku-semuajenis.streamlit.app"
     headers = {"Referer": app_url_referer}
+    
+    # 4. Inisialisasi variabel hasil
+    hasil_buku = []
+    has_more = False
+    next_page_params = {'startIndex': startIndex, 'maxResults': maxResults}
 
-    hasil_buku, has_more, next_page_params = [], False, {'startIndex': startIndex, 'maxResults': maxResults}
+    # 5. Lakukan panggilan API dengan error handling
     try:
-        # Tambahkan parameter 'headers' ke dalam panggilan requests.get()
-        response = requests.get(base_url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
+        response = requests.get(base_url, params=params, headers=headers, timeout=15)
+        response.raise_for_status() # Akan memunculkan error untuk status 4xx atau 5xx
         
-        # ... (sisa kode fungsi tetap sama) ...
-        data = response.json(); items = data.get("items", [])
+        data = response.json()
+        items = data.get("items", [])
+        
+        # 6. Proses setiap item yang ditemukan
         for item in items:
             volume_info = item.get("volumeInfo", {})
+            
+            # Ekstraksi data dengan fallback jika field tidak ada
             hasil_buku.append({
-                "id_buku_api": item.get("id"), "judul": volume_info.get("title", "N/A"),
-                "penulis": ", ".join(volume_info.get("authors", ["N/A"])), "item_type": "Book",
-                "deskripsi": volume_info.get("description", "N/A"), "genre": ", ".join(volume_info.get("categories", ["Umum"])),
-                "rating_rata2": volume_info.get("averageRating", np.nan), "jumlah_pembaca": volume_info.get("ratingsCount", np.nan),
+                "id_buku_api": item.get("id"),
+                "judul": volume_info.get("title", "Judul Tidak Tersedia"),
+                "penulis": ", ".join(volume_info.get("authors", ["Penulis Tidak Diketahui"])),
+                "item_type": "Book",
+                "deskripsi": volume_info.get("description", "Tidak ada deskripsi."),
+                "genre": ", ".join(volume_info.get("categories", ["Umum"])),
+                "rating_rata2": volume_info.get("averageRating", np.nan),
+                "jumlah_pembaca": volume_info.get("ratingsCount", np.nan),
                 "url_gambar_sampul": volume_info.get("imageLinks", {}).get("thumbnail", DEFAULT_IMAGE_URL).replace("http://", "https://"),
                 "isbn_13": next((id_obj.get('identifier') for id_obj in volume_info.get('industryIdentifiers', []) if id_obj.get('type') == 'ISBN_13'), None),
-                "tanggal_publikasi": volume_info.get("publishedDate", "N/A"), "penerbit": volume_info.get("publisher", "N/A"),
-                "jumlah_halaman": volume_info.get("pageCount", np.nan), "bahasa": volume_info.get("language", "N/A"),
-                "source_api": "Google Books", "gb_info_link": volume_info.get("infoLink"), "gb_preview_link": volume_info.get("previewLink"),
-                "gb_subtitle": volume_info.get("subtitle"), "gb_maturity_rating": volume_info.get("maturityRating"), "gb_print_type": volume_info.get("printType")
+                "tanggal_publikasi": volume_info.get("publishedDate", "N/A"),
+                "penerbit": volume_info.get("publisher", "N/A"),
+                "jumlah_halaman": volume_info.get("pageCount", np.nan),
+                "bahasa": volume_info.get("language", "N/A"),
+                "source_api": "Google Books",
+                "gb_info_link": volume_info.get("infoLink"),
+                "gb_preview_link": volume_info.get("previewLink"),
+                "gb_subtitle": volume_info.get("subtitle"),
+                "gb_maturity_rating": volume_info.get("maturityRating"),
+                "gb_print_type": volume_info.get("printType")
             })
-        items_returned = len(items); total_items_api = data.get("totalItems", 0)
-        if items_returned > 0 and (startIndex + items_returned) < total_items_api: has_more = True
+            
+        # 7. Tentukan informasi paginasi untuk panggilan berikutnya
+        items_returned = len(items)
+        total_items_api = data.get("totalItems", 0)
+        
+        if items_returned > 0 and (startIndex + items_returned) < total_items_api:
+            has_more = True
+        
+        # Selalu update parameter halaman berikutnya
         next_page_params = {'startIndex': startIndex + items_returned, 'maxResults': maxResults}
+
         return hasil_buku, has_more, next_page_params
-    except requests.exceptions.Timeout: st.warning("Google Books API Timeout."); return [], False, {'startIndex': startIndex, 'maxResults': maxResults}
-    except Exception as e: st.warning(f"Google Books API Error: {e}"); return [], False, {'startIndex': startIndex, 'maxResults': maxResults}
+
+    except requests.exceptions.Timeout:
+        st.warning("Google Books API Timeout. Permintaan memakan waktu terlalu lama.")
+        return [], False, next_page_params
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"Google Books API HTTP Error: {http_err}")
+        if http_err.response is not None:
+            st.error(f"Response Body: {http_err.response.text}")
+        return [], False, next_page_params
+    except requests.exceptions.RequestException as e:
+        st.error(f"Google Books API Request Error: {e}")
+        return [], False, next_page_params
+    except Exception as e:
+        st.error(f"Terjadi kesalahan tidak terduga di search_google_books: {e}")
+        return [], False, next_page_params
 
 def search_open_library_by_query(query, page=1, limit=30):
     base_url = "http://openlibrary.org/search.json"; params = {"q": query, "page": page, "limit": limit, "fields": "key,cover_edition_key,title,author_name,first_sentence,subject_key,isbn,publisher,language,publish_date,number_of_pages_median"}
